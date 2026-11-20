@@ -162,6 +162,3 @@ Digital-Lock-FSM-Verilog/
 
 Electronics and Communication Engineering Data Science
 
-## 📜 License
-
-This project is licensed under the MIT License.
