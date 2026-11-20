@@ -1,40 +1,47 @@
 
+
 `timescale 1ns / 1ps
 
 module digital_lock_tb;
 
     reg clk;
-    reg reset;
-    reg enter;
+    reg reset_n;
+    reg enter_n;
     reg [3:0] password;
 
     wire unlock;
     wire locked;
     wire [1:0] attempts;
 
+    // DUT instantiation
     digital_lock uut (
         .clk(clk),
-        .reset(reset),
-        .enter(enter),
+        .reset_n(reset_n),
+        .enter_n(enter_n),
         .password(password),
         .unlock(unlock),
         .locked(locked),
         .attempts(attempts)
     );
 
-    // Clock generation: 10 ns period
+    // 100 MHz equivalent simulation clock
     always #5 clk = ~clk;
 
-    // Task to enter password
+    // Task for entering password
     task enter_password;
         input [3:0] pass;
         begin
             @(negedge clk);
             password = pass;
-            enter = 1'b1;
 
-            @(negedge clk);
-            enter = 1'b0;
+            // Press enter
+            enter_n = 1'b0;
+
+            // Hold button for multiple clock cycles
+            repeat (3) @(negedge clk);
+
+            // Release enter
+            enter_n = 1'b1;
 
             repeat (2) @(negedge clk);
         end
@@ -42,67 +49,101 @@ module digital_lock_tb;
 
     initial begin
 
+        // Initial values
         clk = 0;
-        reset = 1;
-        enter = 0;
+        reset_n = 0;
+        enter_n = 1;
         password = 4'b0000;
 
-        $display("DIGITAL LOCK FSM TEST STARTED");
+        $display("--------------------------------");
+        $display(" DIGITAL LOCK FSM TESTBENCH");
+        $display("--------------------------------");
 
-        // Reset
-        repeat (2) @(negedge clk);
-        reset = 0;
+        // Reset system
+        repeat (3) @(negedge clk);
+        reset_n = 1;
 
-        // Test 1: Incorrect password
+        // TEST 1: First incorrect password
+        $display("\nTEST 1: First incorrect attempt");
+
         enter_password(4'b0001);
-        $display("Attempt 1: %b", attempts);
 
-        // Test 2: Incorrect password
+        if (attempts == 1 && !locked)
+            $display("PASS: Attempt count = 1");
+        else
+            $display("FAIL: First attempt");
+
+        // TEST 2: Second incorrect password
+        $display("\nTEST 2: Second incorrect attempt");
+
         enter_password(4'b0011);
-        $display("Attempt 2: %b", attempts);
 
-        // Test 3: Incorrect password
+        if (attempts == 2 && !locked)
+            $display("PASS: Attempt count = 2");
+        else
+            $display("FAIL: Second attempt");
+
+        // TEST 3: Third incorrect password
+        $display("\nTEST 3: Third incorrect attempt");
+
         enter_password(4'b0101);
-        $display("Attempt 3: %b", attempts);
 
-        if (locked && !unlock)
+        if (attempts == 3 && locked && !unlock)
             $display("PASS: LOCKOUT ACTIVATED");
         else
             $display("FAIL: LOCKOUT NOT ACTIVATED");
 
-        // Test 4: Attempt correct password during lockout
+        // TEST 4: Correct password during lockout
+        $display("\nTEST 4: Correct password during lockout");
+
         enter_password(4'b1010);
 
         if (locked && !unlock)
-            $display("PASS: ACCESS DENIED DURING LOCKOUT");
+            $display("PASS: ACCESS DENIED");
         else
             $display("FAIL: LOCKOUT BYPASSED");
 
-        // Test 5: Reset
-        @(negedge clk);
-        reset = 1;
+        // TEST 5: Reset system
+        $display("\nTEST 5: Reset functionality");
 
         @(negedge clk);
-        reset = 0;
+        reset_n = 0;
+
+        repeat (2) @(negedge clk);
+        reset_n = 1;
 
         repeat (2) @(negedge clk);
 
-        if (!locked && !unlock && attempts == 0)
+        if (attempts == 0 && !locked && !unlock)
             $display("PASS: RESET SUCCESSFUL");
         else
             $display("FAIL: RESET FAILED");
 
-        // Test 6: Correct password
+        // TEST 6: Correct password
+        $display("\nTEST 6: Correct password authentication");
+
         enter_password(4'b1010);
 
         if (unlock && !locked)
-            $display("PASS: CORRECT PASSWORD UNLOCKED");
+            $display("PASS: ACCESS GRANTED");
         else
-            $display("FAIL: CORRECT PASSWORD REJECTED");
+            $display("FAIL: ACCESS DENIED");
 
-        $display("DIGITAL LOCK FSM TEST COMPLETED");
+        // Final result
+        $display("\n--------------------------------");
+        $display(" TESTBENCH COMPLETED");
+        $display("--------------------------------");
 
         $finish;
+
+    end
+
+    // Monitor signal changes
+    initial begin
+        $monitor(
+            "Time=%0t | Password=%b | Attempts=%d | Unlock=%b | Locked=%b",
+            $time, password, attempts, unlock, locked
+        );
     end
 
 endmodule
